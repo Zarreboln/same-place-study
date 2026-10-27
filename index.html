@@ -62,9 +62,12 @@ ol.steps li{margin:.45em 0}
 .trial{margin-top:20px;display:grid;gap:14px}
 .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:640px){.pair{grid-template-columns:1fr}}
+/* The box is the photograph itself, with no crop: a mark's position is stored
+   as a percentage, and a cropped or letterboxed frame would put it somewhere
+   else on the original image. */
 .shot{position:relative;background:var(--sunk);border:1px solid var(--line);
-  border-radius:8px;overflow:hidden;aspect-ratio:4/3}
-.shot img{width:100%;height:100%;object-fit:cover;display:block;user-select:none;-webkit-user-drag:none}
+  border-radius:8px;overflow:hidden;line-height:0}
+.shot img{width:100%;height:auto;display:block;user-select:none;-webkit-user-drag:none}
 .shot.marking{cursor:crosshair}
 .shot .tag{position:absolute;top:8px;left:8px;z-index:3;
   font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;
@@ -527,8 +530,7 @@ function wire(){
   try{ ALL = JSON.parse(read("spn_rows") || "[]"); }catch(e){ ALL = []; }
   $("#dl").addEventListener("click", ()=>{
     const blob = new Blob([JSON.stringify(ALL,null,2)], {type:"application/json"});
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
     a.download = "same-place-" + pid + ".json";
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
@@ -536,10 +538,8 @@ function wire(){
   $("#copy").addEventListener("click", async ()=>{
     const t = JSON.stringify(ALL);
     try{ await navigator.clipboard.writeText(t); $("#copy").textContent = "Copied"; }
-    catch(e){
-      const ta = $("#raw"); ta.hidden = false; ta.value = t; ta.select();
-      $("#copy").textContent = "Select the text above and copy";
-    }
+    catch(e){ const ta=$("#raw"); ta.hidden=false; ta.value=t; ta.select();
+      $("#copy").textContent = "Select the text above and copy"; }
   });
 })();
 </script>

@@ -73,8 +73,13 @@ ol.steps li{margin:.45em 0}
   width:26px;height:26px;border-radius:50%;border:2px solid #fff;
   background:var(--mark);box-shadow:0 1px 6px rgba(0,0,0,.45);
   display:grid;place-items:center;font-family:var(--mono);font-size:.68rem;
-  font-weight:500;color:#231a05;cursor:pointer}
-.pin.sel{outline:3px solid var(--accent);outline-offset:2px}
+  font-weight:500;color:#231a05;cursor:grab;touch-action:none}
+.pin.sel{outline:3px solid var(--accent);outline-offset:2px;z-index:6}
+.pin.dragging{cursor:grabbing;opacity:.85;box-shadow:0 3px 14px rgba(0,0,0,.55)}
+.pin .x{position:absolute;top:-9px;right:-9px;width:18px;height:18px;
+  border-radius:50%;background:var(--diff);color:#fff;border:1.5px solid #fff;
+  display:grid;place-items:center;font-size:.72rem;line-height:1;
+  font-family:var(--sans);cursor:pointer;z-index:7}
 
 .q{padding:16px 18px}
 .q h2{font-family:var(--display);font-weight:400;font-size:1.22rem;margin:0 0 .7em}
@@ -183,7 +188,8 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <div id="markWrap" hidden style="margin-top:18px">
         <p class="lab">Mark what settled it</p>
         <p class="sub" id="markHint">Click on photograph A and on photograph B —
-          up to three marks each — then label every mark.</p>
+          up to three marks each — then label every mark. Drag a mark to move it;
+          click it and press × to remove it.</p>
         <div class="cats" id="cats" hidden></div>
         <div class="marklist" id="marklist"></div>
       </div>
@@ -224,7 +230,7 @@ const CATS = [
 ];
 
 let PAIRS = [], idx = 0, pid = null, ALL = [];
-let trial = null, selected = null, t0 = 0;
+let trial = null, selected = null, t0 = 0, suppressClick = false;
 
 const $ = s => document.querySelector(s);
 const pbar = $("#pbar"), pcount = $("#pcount");
@@ -280,13 +286,50 @@ function drawMarks(){
       const d = document.createElement("div");
       d.className = "pin" + (selected===i ? " sel" : "");
       d.style.left = m.x + "%"; d.style.top = m.y + "%";
-      d.textContent = String(i+1);
-      d.title = m.cat ? (CATS.find(c=>c[0]===m.cat)||[,"?"])[1] : "click to label";
-      d.addEventListener("click", ev=>{
-        ev.stopPropagation();
-        selected = (selected === i) ? null : i;
-        drawMarks(); syncCats();
+      d.append(String(i+1));
+      d.title = m.cat
+        ? (CATS.find(c=>c[0]===m.cat)||[,"?"])[1] + " — drag to move"
+        : "drag to move, click to label";
+
+      if(selected === i){
+        const x = document.createElement("span");
+        x.className = "x"; x.textContent = "×";
+        x.title = "Remove this mark";
+        x.addEventListener("pointerdown", ev=>ev.stopPropagation());
+        x.addEventListener("click", ev=>{
+          ev.stopPropagation();
+          trial.marks.splice(i,1); selected = null;
+          drawMarks(); syncCats(); checkReady();
+        });
+        d.appendChild(x);
+      }
+
+      let moved = false, id = null;
+      d.addEventListener("pointerdown", ev=>{
+        ev.stopPropagation(); ev.preventDefault();
+        moved = false; id = ev.pointerId;
+        d.setPointerCapture(id); d.classList.add("dragging");
       });
+      d.addEventListener("pointermove", ev=>{
+        if(id === null || ev.pointerId !== id) return;
+        const r = host.getBoundingClientRect();
+        const nx = Math.min(100, Math.max(0, ((ev.clientX - r.left)/r.width)*100));
+        const ny = Math.min(100, Math.max(0, ((ev.clientY - r.top)/r.height)*100));
+        if(Math.abs(nx - m.x) > .6 || Math.abs(ny - m.y) > .6) moved = true;
+        m.x = +nx.toFixed(2); m.y = +ny.toFixed(2);
+        d.style.left = m.x + "%"; d.style.top = m.y + "%";
+      });
+      const end = ev => {
+        if(id === null) return;
+        try{ d.releasePointerCapture(id); }catch(e){}
+        id = null; d.classList.remove("dragging");
+        suppressClick = true;
+        setTimeout(()=>{ suppressClick = false; }, 0);
+        if(!moved){ selected = (selected === i) ? null : i; }
+        drawMarks(); syncCats();
+      };
+      d.addEventListener("pointerup", end);
+      d.addEventListener("pointercancel", end);
       host.appendChild(d);
     });
   });
@@ -309,8 +352,9 @@ function drawMarks(){
 }
 
 function onShotClick(side, ev){
+  if(suppressClick) return;
   if(!trial.answer) return;
-  if(ev.target.classList.contains("pin")) return;
+  if(ev.target.closest(".pin")) return;
   const n = trial.marks.filter(m=>m.side===side).length;
   if(n >= 3){ flash("Three marks is the maximum on one photograph."); return; }
   const r = ev.currentTarget.getBoundingClientRect();
@@ -431,7 +475,6 @@ function wire(){
   }
 
   try{ ALL = JSON.parse(read("spn_rows") || "[]"); }catch(e){ ALL = []; }
-
   $("#dl").addEventListener("click", ()=>{
     const blob = new Blob([JSON.stringify(ALL,null,2)], {type:"application/json"});
     const a = document.createElement("a");

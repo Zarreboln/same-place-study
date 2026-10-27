@@ -162,6 +162,14 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       your score; it is where you looked. Roughly ten minutes.</p>
     <button class="big go" id="start">Begin</button>
     <p class="sub" id="resume" hidden></p>
+    <div id="rescue" hidden style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line)">
+      <p class="sub" id="rescueCount" style="margin:0 0 10px"></p>
+      <div class="choices">
+        <button id="dl2">Download my answers</button>
+        <button id="copy2">Copy as text</button>
+      </div>
+      <textarea id="raw2" hidden rows="4" style="width:100%;margin-top:12px;font-family:var(--mono);font-size:.7rem"></textarea>
+    </div>
   </section>
 
   <section id="trial" class="trial" hidden>
@@ -511,6 +519,32 @@ function wire(){
   }
 
   try{ ALL = JSON.parse(read("spn_rows") || "[]"); }catch(e){ ALL = []; }
+
+  /* Answers live in this browser until they are exported, so the export is
+     offered wherever there is something to export, not only after the last
+     pair. Closing the page used to strand them. */
+  if(ALL.length){
+    $("#rescue").hidden = false;
+    $("#rescueCount").textContent =
+      ALL.length + (ALL.length === 1 ? " answer" : " answers")
+      + " are saved in this browser. Download them before you clear your history.";
+  }
+  const saveFile = () => {
+    const blob = new Blob([JSON.stringify(ALL,null,2)], {type:"application/json"});
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = "same-place-" + pid + ".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  };
+  const copyText = async (btn, ta) => {
+    const t = JSON.stringify(ALL);
+    try{ await navigator.clipboard.writeText(t); btn.textContent = "Copied"; }
+    catch(e){ ta.hidden = false; ta.value = t; ta.select();
+      btn.textContent = "Select the text above and copy"; }
+  };
+  $("#dl2").addEventListener("click", saveFile);
+  $("#copy2").addEventListener("click", ()=>copyText($("#copy2"), $("#raw2")));
+
   $("#dl").addEventListener("click", ()=>{
     const blob = new Blob([JSON.stringify(ALL,null,2)], {type:"application/json"});
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);

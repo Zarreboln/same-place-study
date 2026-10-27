@@ -76,6 +76,14 @@ ol.steps li{margin:.45em 0}
   font-weight:500;color:#231a05;cursor:grab;touch-action:none}
 .pin.sel{outline:3px solid var(--accent);outline-offset:2px;z-index:6}
 .pin.dragging{cursor:grabbing;opacity:.85;box-shadow:0 3px 14px rgba(0,0,0,.55)}
+.pin.half{background:var(--surface);color:var(--accent);border-color:var(--accent);
+  border-style:dashed;cursor:default}
+.shot.awaiting{outline:3px solid var(--accent);outline-offset:-3px}
+.shot.awaiting::after{content:"click the matching spot here";position:absolute;
+  left:50%;bottom:10px;transform:translateX(-50%);z-index:5;
+  font-family:var(--mono);font-size:.68rem;letter-spacing:.04em;
+  background:var(--accent);color:#fff;padding:3px 10px;border-radius:4px}
+#noneBtn[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
 .pin .x{position:absolute;top:-9px;right:-9px;width:18px;height:18px;
   border-radius:50%;background:var(--diff);color:#fff;border:1.5px solid #fff;
   display:grid;place-items:center;font-size:.72rem;line-height:1;
@@ -187,9 +195,9 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
       <div id="markWrap" hidden style="margin-top:18px">
         <p class="lab">Mark what settled it</p>
-        <p class="sub" id="markHint">Click on photograph A and on photograph B —
-          up to three marks each — then label every mark. Drag a mark to move it;
-          click it and press × to remove it.</p>
+        <p class="sub" id="markHint"></p>
+        <button id="noneBtn" aria-pressed="false" hidden style="margin:4px 0 10px">
+          Nothing specific — the whole scene differs</button>
         <div class="cats" id="cats" hidden></div>
         <div class="marklist" id="marklist"></div>
       </div>
@@ -244,7 +252,9 @@ function store(k,v){ try{ v===undefined ? localStorage.removeItem(k)
 function read(k){ try{ return localStorage.getItem(k);}catch(e){ return null; } }
 
 function blank(){
-  return { answer:null, confidence:null, marks:[] };
+  /* Evidence is a correspondence, not a point: "this part of A is that part of
+     B". One link therefore carries a point on each photograph and one label. */
+  return { answer:null, confidence:null, links:[], pending:null, nothing:false };
 }
 
 function progress(){
@@ -261,7 +271,7 @@ function renderCats(){
       b.textContent = label; b.dataset.k = k; b.setAttribute("aria-pressed","false");
       b.addEventListener("click", ()=>{
         if(selected == null) return;
-        trial.marks[selected].cat = k;
+        trial.links[selected].cat = k;
         selected = null;
         drawMarks(); syncCats(); checkReady();
       });
@@ -273,79 +283,87 @@ function renderCats(){
 function syncCats(){
   const box = $("#cats");
   box.hidden = (selected == null);
-  const cur = selected!=null ? trial.marks[selected].cat : null;
+  const cur = selected!=null ? trial.links[selected].cat : null;
   [...box.children].forEach(b => b.setAttribute("aria-pressed", String(b.dataset.k === cur)));
+}
+
+function pinOn(host, pt, n, linkIndex, side){
+  const d = document.createElement("div");
+  d.className = "pin" + (selected === linkIndex ? " sel" : "");
+  d.style.left = pt.x + "%"; d.style.top = pt.y + "%";
+  d.append(String(n));
+
+  if(selected === linkIndex && linkIndex != null){
+    const x = document.createElement("span");
+    x.className = "x"; x.textContent = "×"; x.title = "Remove this pair of marks";
+    x.addEventListener("pointerdown", ev=>ev.stopPropagation());
+    x.addEventListener("click", ev=>{
+      ev.stopPropagation();
+      trial.links.splice(linkIndex,1); selected = null;
+      drawMarks(); syncCats(); checkReady();
+    });
+    d.appendChild(x);
+  }
+
+  let moved = false, id = null;
+  d.addEventListener("pointerdown", ev=>{
+    ev.stopPropagation(); ev.preventDefault();
+    moved = false; id = ev.pointerId;
+    d.setPointerCapture(id); d.classList.add("dragging");
+  });
+  d.addEventListener("pointermove", ev=>{
+    if(id === null || ev.pointerId !== id) return;
+    const r = host.getBoundingClientRect();
+    const nx = Math.min(100, Math.max(0, ((ev.clientX - r.left)/r.width)*100));
+    const ny = Math.min(100, Math.max(0, ((ev.clientY - r.top)/r.height)*100));
+    if(Math.abs(nx - pt.x) > .6 || Math.abs(ny - pt.y) > .6) moved = true;
+    pt.x = +nx.toFixed(2); pt.y = +ny.toFixed(2);
+    d.style.left = pt.x + "%"; d.style.top = pt.y + "%";
+  });
+  const end = () => {
+    if(id === null) return;
+    try{ d.releasePointerCapture(id); }catch(e){}
+    id = null; d.classList.remove("dragging");
+    suppressClick = true; setTimeout(()=>{ suppressClick = false; }, 0);
+    if(!moved && linkIndex != null){
+      selected = (selected === linkIndex) ? null : linkIndex;
+    }
+    drawMarks(); syncCats();
+  };
+  d.addEventListener("pointerup", end);
+  d.addEventListener("pointercancel", end);
+  host.appendChild(d);
 }
 
 function drawMarks(){
   ["A","B"].forEach(side=>{
     const host = $("#shot"+side);
     [...host.querySelectorAll(".pin")].forEach(p=>p.remove());
-    trial.marks.forEach((m,i)=>{
-      if(m.side !== side) return;
+    trial.links.forEach((lk,i)=> pinOn(host, side==="A" ? lk.a : lk.b, i+1, i, side));
+    if(trial.pending && trial.pending.side === side){
       const d = document.createElement("div");
-      d.className = "pin" + (selected===i ? " sel" : "");
-      d.style.left = m.x + "%"; d.style.top = m.y + "%";
-      d.append(String(i+1));
-      d.title = m.cat
-        ? (CATS.find(c=>c[0]===m.cat)||[,"?"])[1] + " — drag to move"
-        : "drag to move, click to label";
-
-      if(selected === i){
-        const x = document.createElement("span");
-        x.className = "x"; x.textContent = "×";
-        x.title = "Remove this mark";
-        x.addEventListener("pointerdown", ev=>ev.stopPropagation());
-        x.addEventListener("click", ev=>{
-          ev.stopPropagation();
-          trial.marks.splice(i,1); selected = null;
-          drawMarks(); syncCats(); checkReady();
-        });
-        d.appendChild(x);
-      }
-
-      let moved = false, id = null;
-      d.addEventListener("pointerdown", ev=>{
-        ev.stopPropagation(); ev.preventDefault();
-        moved = false; id = ev.pointerId;
-        d.setPointerCapture(id); d.classList.add("dragging");
-      });
-      d.addEventListener("pointermove", ev=>{
-        if(id === null || ev.pointerId !== id) return;
-        const r = host.getBoundingClientRect();
-        const nx = Math.min(100, Math.max(0, ((ev.clientX - r.left)/r.width)*100));
-        const ny = Math.min(100, Math.max(0, ((ev.clientY - r.top)/r.height)*100));
-        if(Math.abs(nx - m.x) > .6 || Math.abs(ny - m.y) > .6) moved = true;
-        m.x = +nx.toFixed(2); m.y = +ny.toFixed(2);
-        d.style.left = m.x + "%"; d.style.top = m.y + "%";
-      });
-      const end = ev => {
-        if(id === null) return;
-        try{ d.releasePointerCapture(id); }catch(e){}
-        id = null; d.classList.remove("dragging");
-        suppressClick = true;
-        setTimeout(()=>{ suppressClick = false; }, 0);
-        if(!moved){ selected = (selected === i) ? null : i; }
-        drawMarks(); syncCats();
-      };
-      d.addEventListener("pointerup", end);
-      d.addEventListener("pointercancel", end);
+      d.className = "pin half";
+      d.style.left = trial.pending.x + "%"; d.style.top = trial.pending.y + "%";
+      d.append(String(trial.links.length + 1));
       host.appendChild(d);
-    });
+    }
+    host.classList.toggle("awaiting",
+      !!trial.pending && trial.pending.side !== side);
   });
 
   const list = $("#marklist"); list.textContent = "";
-  trial.marks.forEach((m,i)=>{
+  trial.links.forEach((lk,i)=>{
     const row = document.createElement("div"); row.className = "mk";
     const dot = document.createElement("span"); dot.className="dot"; dot.textContent=String(i+1);
-    const w = document.createElement("span"); w.className="which"; w.textContent = "PHOTO "+m.side;
+    const w = document.createElement("span"); w.className="which"; w.textContent = "A ↔ B";
     const c = document.createElement("span"); c.className="cat";
-    c.textContent = m.cat ? (CATS.find(x=>x[0]===m.cat)||[,"?"])[1] : "— click the mark, then choose a label";
-    if(!m.cat) c.style.color = "var(--accent)";
+    c.textContent = lk.cat ? (CATS.find(x=>x[0]===lk.cat)||[,"?"])[1]
+                           : "— click either mark, then choose a label";
+    if(!lk.cat) c.style.color = "var(--accent)";
     const rm = document.createElement("button"); rm.className="rm"; rm.type="button";
-    rm.setAttribute("aria-label","Remove mark "+(i+1)); rm.textContent="×";
+    rm.setAttribute("aria-label","Remove pair "+(i+1)); rm.textContent="×";
     rm.addEventListener("click", ()=>{
-      trial.marks.splice(i,1); selected=null; drawMarks(); syncCats(); checkReady();
+      trial.links.splice(i,1); selected=null; drawMarks(); syncCats(); checkReady();
     });
     row.append(dot,w,c,rm); list.appendChild(row);
   });
@@ -353,15 +371,27 @@ function drawMarks(){
 
 function onShotClick(side, ev){
   if(suppressClick) return;
-  if(!trial.answer) return;
+  if(!trial.answer || trial.nothing) return;
   if(ev.target.closest(".pin")) return;
-  const n = trial.marks.filter(m=>m.side===side).length;
-  if(n >= 3){ flash("Three marks is the maximum on one photograph."); return; }
+  if(trial.links.length >= 3 && !trial.pending){
+    flash("Three pairs is the maximum."); return;
+  }
   const r = ev.currentTarget.getBoundingClientRect();
-  const x = ((ev.clientX - r.left) / r.width) * 100;
-  const y = ((ev.clientY - r.top) / r.height) * 100;
-  trial.marks.push({ side, x:+x.toFixed(2), y:+y.toFixed(2), cat:null });
-  selected = trial.marks.length - 1;
+  const x = +(((ev.clientX - r.left) / r.width) * 100).toFixed(2);
+  const y = +(((ev.clientY - r.top) / r.height) * 100).toFixed(2);
+
+  if(!trial.pending){
+    trial.pending = { side, x, y };                 // first half of a pair
+  } else if(trial.pending.side === side){
+    trial.pending.x = x; trial.pending.y = y;       // same photograph: move it
+  } else {
+    const first = trial.pending, second = { x, y };
+    trial.links.push(side === "B"
+      ? { a:{x:first.x,y:first.y}, b:second, cat:null }
+      : { a:second, b:{x:first.x,y:first.y}, cat:null });
+    trial.pending = null;
+    selected = trial.links.length - 1;
+  }
   drawMarks(); syncCats(); checkReady();
 }
 
@@ -373,17 +403,31 @@ function flash(msg){
 
 function checkReady(){
   const h = $("#footHint"), btn = $("#next");
-  const a = trial.marks.filter(m=>m.side==="A"), b = trial.marks.filter(m=>m.side==="B");
-  const unlabelled = trial.marks.some(m=>!m.cat);
   let msg = "", ok = false;
   if(!trial.answer) msg = "Choose same or different first.";
   else if(!trial.confidence) msg = "Say how sure you are.";
-  else if(!a.length || !b.length) msg = "Mark at least one thing on each photograph.";
-  else if(unlabelled) msg = "Give every mark a label.";
-  else { ok = true; msg = ""; }
+  else if(trial.nothing) { ok = true; }
+  else if(trial.pending) msg = trial.pending.side === "A"
+    ? "Now click the matching spot in photograph B."
+    : "Now click the matching spot in photograph A.";
+  else if(!trial.links.length) msg = "Link one thing in A to the same thing in B.";
+  else if(trial.links.some(l=>!l.cat)) msg = "Give every pair a label.";
+  else ok = true;
   btn.disabled = !ok; h.textContent = msg;
+
   $("#confWrap").hidden = !trial.answer;
   $("#markWrap").hidden = !trial.confidence;
+  $("#markHint").textContent = trial.answer === "same"
+    ? "Click something in photograph A, then click the same thing in photograph B. "
+    + "That pair is one piece of evidence. Up to three pairs. Drag a mark to move it."
+    : "Click something in photograph A, then click the spot in B where it should have "
+    + "matched but does not. Up to three pairs. Drag a mark to move it.";
+
+  const nb = $("#noneBtn");
+  nb.hidden = trial.answer !== "different";
+  nb.setAttribute("aria-pressed", String(trial.nothing));
+  $("#cats").hidden = (selected == null) || trial.nothing;
+  $("#marklist").hidden = trial.nothing;
 }
 
 function loadTrial(){
@@ -405,7 +449,8 @@ async function saveTrial(){
     truth: p.truth, condition: p.cls,
     answer: trial.answer, correct: trial.answer === p.truth,
     confidence: trial.confidence,
-    marks: trial.marks,
+    links: trial.links,
+    no_specific_evidence: trial.nothing,
     seconds: +((performance.now()-t0)/1000).toFixed(1),
     at: new Date().toISOString()
   };
@@ -443,6 +488,11 @@ function wire(){
   });
   $("#shotA").addEventListener("click", e=>onShotClick("A", e));
   $("#shotB").addEventListener("click", e=>onShotClick("B", e));
+  $("#noneBtn").addEventListener("click", ()=>{
+    trial.nothing = !trial.nothing;
+    if(trial.nothing){ trial.links = []; trial.pending = null; selected = null; }
+    drawMarks(); syncCats(); checkReady();
+  });
   $("#next").addEventListener("click", async ()=>{
     $("#next").disabled = true;
     await saveTrial();

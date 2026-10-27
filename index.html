@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Same Place or Not</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+</head>
+<body>
+<style>
+html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+/* Layout: a single centred column — two photographs, then the judgment, then the marking. */
+:root{
+  --bg:#f2f3f5; --surface:#ffffff; --sunk:#e7e9ec;
+  --ink:#16181d; --muted:#5d636e; --line:#cfd3da;
+  --accent:#c2410c; --mark:#f59e0b;
+  --same:#15803d; --diff:#b91c1c;
+  --display:"Newsreader",Georgia,"Times New Roman",serif;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121418; --surface:#1b1e24; --sunk:#23262d;
+  --ink:#eceef1; --muted:#9aa1ac; --line:#343842;
+  --accent:#fb923c; --mark:#fbbf24; --same:#4ade80; --diff:#f87171;
+  color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#121418; --surface:#1b1e24; --sunk:#23262d;
+  --ink:#eceef1; --muted:#9aa1ac; --line:#343842;
+  --accent:#fb923c; --mark:#fbbf24; --same:#4ade80; --diff:#f87171;
+  color-scheme:dark;}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);
+  margin:0;line-height:1.5;-webkit-text-size-adjust:100%}
+.wrap{max-width:1020px;margin:0 auto;padding-inline:16px;padding-block:0 56px}
+
+/* ── header ─────────────────────────────────────────── */
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:40;
+  background:var(--bg);border-bottom:1px solid var(--line)}
+.hrow{max-width:1020px;margin:0 auto;padding:10px 16px;
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.brand{font-family:var(--display);font-size:1.12rem;font-weight:500;letter-spacing:-.01em}
+.bar{flex:1;min-width:120px;height:5px;background:var(--sunk);border-radius:99px;overflow:hidden}
+.bar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s ease}
+.count{font-family:var(--mono);font-size:.78rem;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* ── intro ──────────────────────────────────────────── */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.intro{padding:28px;margin-top:28px}
+.intro h1{font-family:var(--display);font-weight:400;font-size:clamp(1.7rem,4.2vw,2.4rem);
+  margin:0 0 .4em;text-wrap:balance;letter-spacing:-.015em}
+.intro p{margin:0 0 1em;max-width:62ch;color:var(--ink)}
+.intro .lede{font-size:1.04rem;color:var(--muted)}
+ol.steps{margin:0 0 1.4em;padding-left:1.15em;max-width:62ch}
+ol.steps li{margin:.45em 0}
+.note{font-size:.86rem;color:var(--muted);border-left:2px solid var(--line);
+  padding-left:12px;margin:1.2em 0;max-width:60ch}
+
+/* ── trial ──────────────────────────────────────────── */
+.trial{margin-top:20px;display:grid;gap:14px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:640px){.pair{grid-template-columns:1fr}}
+.shot{position:relative;background:var(--sunk);border:1px solid var(--line);
+  border-radius:8px;overflow:hidden;aspect-ratio:4/3}
+.shot img{width:100%;height:100%;object-fit:cover;display:block;user-select:none;-webkit-user-drag:none}
+.shot.marking{cursor:crosshair}
+.shot .tag{position:absolute;top:8px;left:8px;z-index:3;
+  font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;
+  background:rgba(0,0,0,.62);color:#fff;padding:2px 7px;border-radius:4px}
+.pin{position:absolute;transform:translate(-50%,-50%);z-index:4;
+  width:26px;height:26px;border-radius:50%;border:2px solid #fff;
+  background:var(--mark);box-shadow:0 1px 6px rgba(0,0,0,.45);
+  display:grid;place-items:center;font-family:var(--mono);font-size:.68rem;
+  font-weight:500;color:#231a05;cursor:pointer}
+.pin.sel{outline:3px solid var(--accent);outline-offset:2px}
+
+.q{padding:16px 18px}
+.q h2{font-family:var(--display);font-weight:400;font-size:1.22rem;margin:0 0 .7em}
+.choices{display:flex;gap:10px;flex-wrap:wrap}
+button{font:inherit;cursor:pointer;border-radius:7px;border:1px solid var(--line);
+  background:var(--surface);color:var(--ink);padding:9px 16px;transition:.14s}
+button:hover{border-color:var(--muted)}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.big{font-weight:600;padding:11px 22px}
+.big[aria-pressed="true"][data-v="same"]{background:var(--same);border-color:var(--same);color:#fff}
+.big[aria-pressed="true"][data-v="different"]{background:var(--diff);border-color:var(--diff);color:#fff}
+.conf{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.conf button{min-width:42px;font-family:var(--mono);padding:8px 0;text-align:center}
+.conf button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);
+  color:var(--bg);font-weight:500}
+.lab{font-family:var(--mono);font-size:.72rem;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);margin:0 0 .55em}
+.sub{font-size:.88rem;color:var(--muted);margin:.5em 0 0;max-width:64ch}
+
+.cats{display:flex;gap:7px;flex-wrap:wrap;margin-top:4px}
+.cats button{padding:7px 13px;font-size:.9rem}
+.cats button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.marklist{display:grid;gap:6px;margin-top:10px}
+.mk{display:flex;gap:9px;align-items:center;font-size:.87rem;
+  background:var(--sunk);border-radius:6px;padding:6px 10px}
+.mk .dot{width:20px;height:20px;border-radius:50%;background:var(--mark);
+  display:grid;place-items:center;font-family:var(--mono);font-size:.66rem;
+  color:#231a05;flex:none}
+.mk .which{font-family:var(--mono);font-size:.74rem;color:var(--muted);flex:none}
+.mk .cat{flex:1;min-width:0}
+.mk .rm{background:none;border:none;color:var(--muted);padding:2px 6px;font-size:1rem;line-height:1}
+.mk .rm:hover{color:var(--diff)}
+
+.foot{display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+  padding:14px 18px;border-top:1px solid var(--line)}
+.go{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;padding:11px 26px}
+.go[disabled]{opacity:.42;cursor:not-allowed}
+.hint{font-size:.84rem;color:var(--muted)}
+
+.done{padding:34px 28px;margin-top:28px;text-align:center}
+.done h2{font-family:var(--display);font-weight:400;font-size:1.8rem;margin:0 0 .4em}
+.tally{font-family:var(--mono);font-size:.84rem;color:var(--muted);margin-top:1.4em;
+  font-variant-numeric:tabular-nums}
+.pid{font-family:var(--mono);font-size:.76rem;color:var(--muted)}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<header>
+  <div class="hrow">
+    <span class="brand">Same place or not</span>
+    <div class="bar"><i id="pbar"></i></div>
+    <span class="count" id="pcount">—</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="card intro" id="intro">
+    <h1>Which parts of a street do you use to recognise it?</h1>
+    <p class="lede">Twenty pairs of street-level photographs from Copenhagen, San
+      Francisco and Tokyo. For each pair you decide whether the two pictures show
+      the same place, and then point at whatever made you decide.</p>
+    <ol class="steps">
+      <li><strong>Judge.</strong> Same place, or different places.</li>
+      <li><strong>Rate how sure you are</strong>, from 1 to 5.</li>
+      <li><strong>Mark your evidence.</strong> Click directly on each photograph,
+        once to three times, wherever you see what settled it — whether that is
+        something shared or something that does not match. Then say what kind of
+        thing you marked.</li>
+    </ol>
+    <p class="note">Every pair has a correct answer, drawn from the camera positions
+      recorded when the photographs were taken. The point of the study is not
+      your score; it is where you looked. Roughly ten minutes.</p>
+    <button class="big go" id="start">Begin</button>
+    <p class="sub" id="resume" hidden></p>
+  </section>
+
+  <section id="trial" class="trial" hidden>
+    <div class="pair">
+      <div class="shot marking" id="shotA">
+        <span class="tag">PHOTOGRAPH A</span><img id="imgA" alt="First street photograph">
+      </div>
+      <div class="shot marking" id="shotB">
+        <span class="tag">PHOTOGRAPH B</span><img id="imgB" alt="Second street photograph">
+      </div>
+    </div>
+
+    <div class="card q">
+      <h2>Do these show the same place?</h2>
+      <div class="choices">
+        <button class="big" data-v="same" aria-pressed="false">Same place</button>
+        <button class="big" data-v="different" aria-pressed="false">Different places</button>
+      </div>
+
+      <div id="confWrap" hidden style="margin-top:18px">
+        <p class="lab">How sure are you?</p>
+        <div class="conf" id="conf">
+          <button data-c="1" aria-pressed="false">1</button>
+          <button data-c="2" aria-pressed="false">2</button>
+          <button data-c="3" aria-pressed="false">3</button>
+          <button data-c="4" aria-pressed="false">4</button>
+          <button data-c="5" aria-pressed="false">5</button>
+          <span class="hint">1 = guessing · 5 = certain</span>
+        </div>
+      </div>
+
+      <div id="markWrap" hidden style="margin-top:18px">
+        <p class="lab">Mark what settled it</p>
+        <p class="sub" id="markHint">Click on photograph A and on photograph B —
+          up to three marks each — then label every mark.</p>
+        <div class="cats" id="cats" hidden></div>
+        <div class="marklist" id="marklist"></div>
+      </div>
+    </div>
+
+    <div class="card foot">
+      <button class="go" id="next" disabled>Next pair</button>
+      <span class="hint" id="footHint"></span>
+    </div>
+  </section>
+
+  <section class="card done" id="done" hidden>
+    <h2>Finished — thank you</h2>
+    <p class="sub" style="margin-inline:auto">Your answers are saved. You can close
+      this page.</p>
+    <p class="tally" id="tally"></p>
+    <div id="export" hidden style="margin-top:22px">
+      <p class="sub" style="margin-inline:auto">Send the file to Zining — zining at mit dot edu.</p>
+      <div class="choices" style="justify-content:center;margin-top:12px">
+        <button class="go" id="dl">Download my answers</button>
+        <button id="copy">Copy as text</button>
+      </div>
+      <textarea id="raw" hidden rows="4" style="width:100%;margin-top:12px;font-family:var(--mono);font-size:.7rem"></textarea>
+    </div>
+    <p class="pid" id="pidOut"></p>
+  </section>
+</div>
+
+<script>
+const CATS = [
+  ["building",   "Building"],
+  ["signs",      "Street furniture & signs"],
+  ["vegetation", "Vegetation"],
+  ["ground",     "Ground"],
+  ["sky",        "Sky & skyline"],
+  ["dynamic",    "People & vehicles"],
+  ["other",      "Other"]
+];
+
+let PAIRS = [], idx = 0, pid = null, ALL = [];
+let trial = null, selected = null, t0 = 0;
+
+const $ = s => document.querySelector(s);
+const pbar = $("#pbar"), pcount = $("#pcount");
+
+function makeId(){
+  const r = Math.random().toString(36).slice(2,8);
+  return "p-" + Date.now().toString(36) + "-" + r;
+}
+function store(k,v){ try{ v===undefined ? localStorage.removeItem(k)
+  : localStorage.setItem(k,v);}catch(e){} }
+function read(k){ try{ return localStorage.getItem(k);}catch(e){ return null; } }
+
+function blank(){
+  return { answer:null, confidence:null, marks:[] };
+}
+
+function progress(){
+  const n = PAIRS.length || 20;
+  pbar.style.width = (idx / n * 100) + "%";
+  pcount.textContent = Math.min(idx+1, n) + " / " + n;
+}
+
+function renderCats(){
+  const box = $("#cats");
+  if(!box.childElementCount){
+    CATS.forEach(([k,label])=>{
+      const b = document.createElement("button");
+      b.textContent = label; b.dataset.k = k; b.setAttribute("aria-pressed","false");
+      b.addEventListener("click", ()=>{
+        if(selected == null) return;
+        trial.marks[selected].cat = k;
+        selected = null;
+        drawMarks(); syncCats(); checkReady();
+      });
+      box.appendChild(b);
+    });
+  }
+  syncCats();
+}
+function syncCats(){
+  const box = $("#cats");
+  box.hidden = (selected == null);
+  const cur = selected!=null ? trial.marks[selected].cat : null;
+  [...box.children].forEach(b => b.setAttribute("aria-pressed", String(b.dataset.k === cur)));
+}
+
+function drawMarks(){
+  ["A","B"].forEach(side=>{
+    const host = $("#shot"+side);
+    [...host.querySelectorAll(".pin")].forEach(p=>p.remove());
+    trial.marks.forEach((m,i)=>{
+      if(m.side !== side) return;
+      const d = document.createElement("div");
+      d.className = "pin" + (selected===i ? " sel" : "");
+      d.style.left = m.x + "%"; d.style.top = m.y + "%";
+      d.textContent = String(i+1);
+      d.title = m.cat ? (CATS.find(c=>c[0]===m.cat)||[,"?"])[1] : "click to label";
+      d.addEventListener("click", ev=>{
+        ev.stopPropagation();
+        selected = (selected === i) ? null : i;
+        drawMarks(); syncCats();
+      });
+      host.appendChild(d);
+    });
+  });
+
+  const list = $("#marklist"); list.textContent = "";
+  trial.marks.forEach((m,i)=>{
+    const row = document.createElement("div"); row.className = "mk";
+    const dot = document.createElement("span"); dot.className="dot"; dot.textContent=String(i+1);
+    const w = document.createElement("span"); w.className="which"; w.textContent = "PHOTO "+m.side;
+    const c = document.createElement("span"); c.className="cat";
+    c.textContent = m.cat ? (CATS.find(x=>x[0]===m.cat)||[,"?"])[1] : "— click the mark, then choose a label";
+    if(!m.cat) c.style.color = "var(--accent)";
+    const rm = document.createElement("button"); rm.className="rm"; rm.type="button";
+    rm.setAttribute("aria-label","Remove mark "+(i+1)); rm.textContent="×";
+    rm.addEventListener("click", ()=>{
+      trial.marks.splice(i,1); selected=null; drawMarks(); syncCats(); checkReady();
+    });
+    row.append(dot,w,c,rm); list.appendChild(row);
+  });
+}
+
+function onShotClick(side, ev){
+  if(!trial.answer) return;
+  if(ev.target.classList.contains("pin")) return;
+  const n = trial.marks.filter(m=>m.side===side).length;
+  if(n >= 3){ flash("Three marks is the maximum on one photograph."); return; }
+  const r = ev.currentTarget.getBoundingClientRect();
+  const x = ((ev.clientX - r.left) / r.width) * 100;
+  const y = ((ev.clientY - r.top) / r.height) * 100;
+  trial.marks.push({ side, x:+x.toFixed(2), y:+y.toFixed(2), cat:null });
+  selected = trial.marks.length - 1;
+  drawMarks(); syncCats(); checkReady();
+}
+
+let flashT = null;
+function flash(msg){
+  const h = $("#footHint"); h.textContent = msg;
+  clearTimeout(flashT); flashT = setTimeout(()=>{ checkReady(); }, 2600);
+}
+
+function checkReady(){
+  const h = $("#footHint"), btn = $("#next");
+  const a = trial.marks.filter(m=>m.side==="A"), b = trial.marks.filter(m=>m.side==="B");
+  const unlabelled = trial.marks.some(m=>!m.cat);
+  let msg = "", ok = false;
+  if(!trial.answer) msg = "Choose same or different first.";
+  else if(!trial.confidence) msg = "Say how sure you are.";
+  else if(!a.length || !b.length) msg = "Mark at least one thing on each photograph.";
+  else if(unlabelled) msg = "Give every mark a label.";
+  else { ok = true; msg = ""; }
+  btn.disabled = !ok; h.textContent = msg;
+  $("#confWrap").hidden = !trial.answer;
+  $("#markWrap").hidden = !trial.confidence;
+}
+
+function loadTrial(){
+  const p = PAIRS[idx];
+  if(!p){ finish(); return; }
+  trial = blank(); selected = null; t0 = performance.now();
+  $("#imgA").src = "img/" + p.a;
+  $("#imgB").src = "img/" + p.b;
+  document.querySelectorAll('.big[data-v]').forEach(b=>b.setAttribute("aria-pressed","false"));
+  document.querySelectorAll('#conf button').forEach(b=>b.setAttribute("aria-pressed","false"));
+  drawMarks(); syncCats(); checkReady(); progress();
+  window.scrollTo({top:0, behavior:"instant"});
+}
+
+async function saveTrial(){
+  const p = PAIRS[idx];
+  const rec = {
+    participant: pid, pair_id: p.id, city: p.city,
+    truth: p.truth, condition: p.cls,
+    answer: trial.answer, correct: trial.answer === p.truth,
+    confidence: trial.confidence,
+    marks: trial.marks,
+    seconds: +((performance.now()-t0)/1000).toFixed(1),
+    at: new Date().toISOString()
+  };
+  ALL = ALL.filter(r => r.pair_id !== rec.pair_id);
+  ALL.push(rec);
+  store("spn_idx", String(idx+1));
+  store("spn_rows", JSON.stringify(ALL));
+}
+
+async function finish(){
+  $("#trial").hidden = true; $("#done").hidden = false;
+  pbar.style.width = "100%"; pcount.textContent = PAIRS.length + " / " + PAIRS.length;
+  $("#pidOut").textContent = "participant " + pid;
+  const ok = ALL.filter(r=>r.correct).length;
+  $("#tally").textContent = ALL.length ? ok + " of " + ALL.length + " judged correctly" : "";
+  $("#export").hidden = false;
+}
+
+function wire(){
+  document.querySelectorAll('.big[data-v]').forEach(b=>{
+    b.addEventListener("click", ()=>{
+      trial.answer = b.dataset.v;
+      document.querySelectorAll('.big[data-v]').forEach(x=>
+        x.setAttribute("aria-pressed", String(x === b)));
+      checkReady();
+    });
+  });
+  document.querySelectorAll('#conf button').forEach(b=>{
+    b.addEventListener("click", ()=>{
+      trial.confidence = +b.dataset.c;
+      document.querySelectorAll('#conf button').forEach(x=>
+        x.setAttribute("aria-pressed", String(x === b)));
+      checkReady();
+    });
+  });
+  $("#shotA").addEventListener("click", e=>onShotClick("A", e));
+  $("#shotB").addEventListener("click", e=>onShotClick("B", e));
+  $("#next").addEventListener("click", async ()=>{
+    $("#next").disabled = true;
+    await saveTrial();
+    idx++; loadTrial();
+  });
+  $("#start").addEventListener("click", ()=>{
+    $("#intro").hidden = true; $("#trial").hidden = false; loadTrial();
+  });
+}
+
+(async function init(){
+  renderCats(); wire();
+  try{
+    const r = await fetch("pairs.json");
+    PAIRS = await r.json();
+  }catch(e){ PAIRS = []; }
+  progress();
+
+  pid = read("spn_pid");
+  if(!pid){ pid = makeId(); store("spn_pid", pid); }
+  const saved = parseInt(read("spn_idx") || "0", 10);
+  if(saved > 0 && saved < PAIRS.length){
+    idx = saved;
+    const r = $("#resume"); r.hidden = false;
+    r.textContent = "Picking up where you left off, at pair " + (saved+1) + ".";
+  } else if(saved >= PAIRS.length && PAIRS.length){
+    const r = $("#resume"); r.hidden = false;
+    r.textContent = "You have already completed this. Starting again will record a second set.";
+    idx = 0; store("spn_idx", "0");
+  }
+
+  try{ ALL = JSON.parse(read("spn_rows") || "[]"); }catch(e){ ALL = []; }
+
+  $("#dl").addEventListener("click", ()=>{
+    const blob = new Blob([JSON.stringify(ALL,null,2)], {type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "same-place-" + pid + ".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  });
+  $("#copy").addEventListener("click", async ()=>{
+    const t = JSON.stringify(ALL);
+    try{ await navigator.clipboard.writeText(t); $("#copy").textContent = "Copied"; }
+    catch(e){
+      const ta = $("#raw"); ta.hidden = false; ta.value = t; ta.select();
+      $("#copy").textContent = "Select the text above and copy";
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

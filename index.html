@@ -8,8 +8,6 @@
 </head>
 <body>
 <style>
-html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}
-:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 /* Layout: a single centred column — two photographs, then the judgment, then the marking. */
 :root{
   --bg:#f2f3f5; --surface:#ffffff; --sunk:#e7e9ec;
@@ -86,7 +84,6 @@ ol.steps li{margin:.45em 0}
   left:50%;bottom:10px;transform:translateX(-50%);z-index:5;
   font-family:var(--mono);font-size:.68rem;letter-spacing:.04em;
   background:var(--accent);color:#fff;padding:3px 10px;border-radius:4px}
-#noneBtn[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
 .pin .x{position:absolute;top:-9px;right:-9px;width:18px;height:18px;
   border-radius:50%;background:var(--diff);color:#fff;border:1.5px solid #fff;
   display:grid;place-items:center;font-size:.72rem;line-height:1;
@@ -199,8 +196,6 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
       <div id="markWrap" hidden style="margin-top:18px">
         <p class="lab">Mark what settled it</p>
         <p class="sub" id="markHint"></p>
-        <button id="noneBtn" aria-pressed="false" hidden style="margin:4px 0 10px">
-          Nothing specific — the whole scene differs</button>
         <div class="cats" id="cats" hidden></div>
         <div class="marklist" id="marklist"></div>
       </div>
@@ -257,7 +252,7 @@ function read(k){ try{ return localStorage.getItem(k);}catch(e){ return null; } 
 function blank(){
   /* Evidence is a correspondence, not a point: "this part of A is that part of
      B". One link therefore carries a point on each photograph and one label. */
-  return { answer:null, confidence:null, links:[], pending:null, nothing:false };
+  return { answer:null, confidence:null, links:[], pending:null };
 }
 
 function progress(){
@@ -374,7 +369,7 @@ function drawMarks(){
 
 function onShotClick(side, ev){
   if(suppressClick) return;
-  if(!trial.answer || trial.nothing) return;
+  if(!trial.answer) return;
   if(ev.target.closest(".pin")) return;
   if(trial.links.length >= 3 && !trial.pending){
     flash("Three pairs is the maximum."); return;
@@ -409,7 +404,6 @@ function checkReady(){
   let msg = "", ok = false;
   if(!trial.answer) msg = "Choose same or different first.";
   else if(!trial.confidence) msg = "Say how sure you are.";
-  else if(trial.nothing) { ok = true; }
   else if(trial.pending) msg = trial.pending.side === "A"
     ? "Now click the matching spot in photograph B."
     : "Now click the matching spot in photograph A.";
@@ -425,12 +419,7 @@ function checkReady(){
     + "That pair is one piece of evidence. Up to three pairs. Drag a mark to move it."
     : "Click something in photograph A, then click the spot in B where it should have "
     + "matched but does not. Up to three pairs. Drag a mark to move it.";
-
-  const nb = $("#noneBtn");
-  nb.hidden = trial.answer !== "different";
-  nb.setAttribute("aria-pressed", String(trial.nothing));
-  $("#cats").hidden = (selected == null) || trial.nothing;
-  $("#marklist").hidden = trial.nothing;
+  $("#cats").hidden = (selected == null);
 }
 
 function loadTrial(){
@@ -453,7 +442,6 @@ async function saveTrial(){
     answer: trial.answer, correct: trial.answer === p.truth,
     confidence: trial.confidence,
     links: trial.links,
-    no_specific_evidence: trial.nothing,
     seconds: +((performance.now()-t0)/1000).toFixed(1),
     at: new Date().toISOString()
   };
@@ -491,11 +479,6 @@ function wire(){
   });
   $("#shotA").addEventListener("click", e=>onShotClick("A", e));
   $("#shotB").addEventListener("click", e=>onShotClick("B", e));
-  $("#noneBtn").addEventListener("click", ()=>{
-    trial.nothing = !trial.nothing;
-    if(trial.nothing){ trial.links = []; trial.pending = null; selected = null; }
-    drawMarks(); syncCats(); checkReady();
-  });
   $("#next").addEventListener("click", async ()=>{
     $("#next").disabled = true;
     await saveTrial();
